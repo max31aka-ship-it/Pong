@@ -1,0 +1,177 @@
+package main
+
+import (
+    "image/color"
+    "log"
+    "math"
+    "github.com/hajimehoshi/ebiten/v2"
+    "github.com/hajimehoshi/ebiten/v2/inpututil"
+)
+
+const (
+    screenW = 800
+    screenH = 500
+    paddleW = 12
+    paddleH = 80
+    ballSize = 15
+)
+
+var (
+    black = color.Black
+    white = color.White
+    green = color.RGBA{0,255,0,255}
+)
+
+type Paddle struct {
+    X, Y float64
+}
+
+func (p *Paddle) Move(dy float64) {
+    p.Y += dy
+    if p.Y < 0 { p.Y = 0 }
+    if p.Y + paddleH > screenH { p.Y = screenH - paddleH }
+}
+
+func (p *Paddle) Draw(screen *ebiten.Image) {
+    ebitenutil.DrawRect(screen, p.X, p.Y, paddleW, paddleH, white)
+}
+
+type Ball struct {
+    X, Y, Dx, Dy float64
+    SpeedMult    float64
+}
+
+func (b *Ball) Reset() {
+    b.X = screenW/2 - ballSize/2
+    b.Y = screenH/2 - ballSize/2
+    b.Dx = 5.0
+    if math.Signbit(b.Dx) { b.Dx = -5.0 }
+    b.Dy = (mathRand() - 0.5) * 6
+    b.SpeedMult = 1.0
+}
+
+func (b *Ball) Move() {
+    b.X += b.Dx * b.SpeedMult
+    b.Y += b.Dy * b.SpeedMult
+    if b.Y <= 0 || b.Y+ballSize >= screenH {
+        b.Dy *= -1
+    }
+}
+
+func (b *Ball) Draw(screen *ebiten.Image) {
+    ebitenutil.DrawRect(screen, b.X, b.Y, ballSize, ballSize, white)
+}
+
+type Game struct {
+    left, right Paddle
+    ball        Ball
+    scoreL, scoreR int
+    gameOver    bool
+    winner      string
+    aiMode      bool
+}
+
+func mathRand() float64 {
+    return float64(rand.Intn(100)) / 100.0
+}
+
+func NewGame() *Game {
+    g := &Game{
+        left:   Paddle{20, screenH/2 - paddleH/2},
+        right:  Paddle{screenW - 20 - paddleW, screenH/2 - paddleH/2},
+        aiMode: true,
+    }
+    g.ball.Reset()
+    return g
+}
+
+func (g *Game) Update() error {
+    if inpututil.IsKeyJustPressed(ebiten.KeyR) && g.gameOver {
+        g.scoreL, g.scoreR = 0,0
+        g.gameOver = false
+        g.ball.Reset()
+    }
+    if inpututil.IsKeyJustPressed(ebiten.KeyA) {
+        g.aiMode = !g.aiMode
+    }
+    if !g.gameOver {
+        // левая ракетка W/S
+        if ebiten.IsKeyPressed(ebiten.KeyW) { g.left.Move(-7) }
+        if ebiten.IsKeyPressed(ebiten.KeyS) { g.left.Move(7) }
+        // правая: AI или игрок
+        if g.aiMode {
+            if g.right.Y + paddleH/2 < g.ball.Y + ballSize/2 {
+                g.right.Move(5)
+            } else {
+                g.right.Move(-5)
+            }
+        } else {
+            if ebiten.IsKeyPressed(ebiten.KeyUp) { g.right.Move(-7) }
+            if ebiten.IsKeyPressed(ebiten.KeyDown) { g.right.Move(7) }
+        }
+        g.ball.Move()
+        // столкновение с левой ракеткой
+        if g.ball.X <= g.left.X+paddleW && g.ball.X+ballSize >= g.left.X &&
+           g.ball.Y+ballSize >= g.left.Y && g.ball.Y <= g.left.Y+paddleH {
+            g.ball.Dx = math.Abs(g.ball.Dx)
+            offset := (g.ball.Y+ballSize/2 - (g.left.Y+paddleH/2)) / (paddleH/2)
+            g.ball.Dy = offset * 6
+            g.ball.SpeedMult += 0.05
+        }
+        // правая ракетка
+        if g.ball.X+ballSize >= g.right.X && g.ball.X <= g.right.X+paddleW &&
+           g.ball.Y+ballSize >= g.right.Y && g.ball.Y <= g.right.Y+paddleH {
+            g.ball.Dx = -math.Abs(g.ball.Dx)
+            offset := (g.ball.Y+ballSize/2 - (g.right.Y+paddleH/2)) / (paddleH/2)
+            g.ball.Dy = offset * 6
+            g.ball.SpeedMult += 0.05
+        }
+        // голы
+        if g.ball.X <= 0 {
+            g.scoreR++
+            g.ball.Reset()
+        }
+        if g.ball.X+ballSize >= screenW {
+            g.scoreL++
+            g.ball.Reset()
+        }
+        if g.scoreL >= 5 {
+            g.gameOver = true
+            g.winner = "Left Player"
+        } else if g.scoreR >= 5 {
+            g.gameOver = true
+            if g.aiMode { g.winner = "AI" } else { g.winner = "Right Player" }
+        }
+    }
+    return nil
+}
+
+func (g *Game) Draw(screen *ebiten.Image) {
+    screen.Fill(black)
+    g.left.Draw(screen)
+    g.right.Draw(screen)
+    g.ball.Draw(screen)
+    // счёт
+    ebitenutil.DebugPrintAt(screen, formatScore(g.scoreL, g.scoreR), screenW/2-40, 20)
+    if g.gameOver {
+        ebitenutil.DebugPrintAt(screen, g.winner+" wins! Press R", screenW/2-120, screenH/2)
+    }
+    mode := "AI"
+    if !g.aiMode { mode = "2P" }
+    ebitenutil.DebugPrintAt(screen, mode, 10, screenH-30)
+}
+
+func formatScore(a,b int) string {
+    return itoa(a) + " : " + itoa(b)
+}
+func itoa(n int) string { return string(rune(n+'0')) }
+
+func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) { return screenW, screenH }
+
+func main() {
+    ebiten.SetWindowSize(screenW, screenH)
+    ebiten.SetWindowTitle("Pong - Go")
+    if err := ebiten.RunGame(NewGame()); err != nil {
+        log.Fatal(err)
+    }
+}
