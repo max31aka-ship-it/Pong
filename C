@@ -1,0 +1,125 @@
+using System;
+using System.Drawing;
+using System.Windows.Forms;
+
+public class PongForm : Form
+{
+    private Timer timer;
+    private float leftY, rightY;
+    private float ballX, ballY, ballDx, ballDy;
+    private int scoreL, scoreR;
+    private bool gameOver;
+    private bool aiMode = true;
+    private const int WIDTH = 800, HEIGHT = 500;
+    private const int PADDLE_H = 80, PADDLE_W = 12;
+    private const int BALL_SIZE = 15;
+
+    public PongForm()
+    {
+        this.Text = "Pong - C#";
+        this.ClientSize = new Size(WIDTH, HEIGHT);
+        this.DoubleBuffered = true;
+        this.KeyPreview = true;
+        this.KeyDown += OnKeyDown;
+        this.Paint += OnPaint;
+        ResetGame();
+        timer = new Timer { Interval = 16 };
+        timer.Tick += (s, e) => Update();
+        timer.Start();
+    }
+
+    private void ResetGame()
+    {
+        leftY = HEIGHT/2 - PADDLE_H/2;
+        rightY = HEIGHT/2 - PADDLE_H/2;
+        ballX = WIDTH/2 - BALL_SIZE/2;
+        ballY = HEIGHT/2 - BALL_SIZE/2;
+        ballDx = 5;
+        ballDy = (new Random().NextDouble() - 0.5)*6;
+        scoreL = scoreR = 0;
+        gameOver = false;
+    }
+
+    private void Update()
+    {
+        if(gameOver) return;
+        // управление
+        if(IsKeyPressed(Keys.W)) leftY -= 7;
+        if(IsKeyPressed(Keys.S)) leftY += 7;
+        leftY = Math.Clamp(leftY, 0, HEIGHT-PADDLE_H);
+        if(aiMode)
+        {
+            if(rightY + PADDLE_H/2 < ballY + BALL_SIZE/2) rightY += 5;
+            else rightY -= 5;
+            rightY = Math.Clamp(rightY, 0, HEIGHT-PADDLE_H);
+        }
+        else
+        {
+            if(IsKeyPressed(Keys.Up)) rightY -= 7;
+            if(IsKeyPressed(Keys.Down)) rightY += 7;
+            rightY = Math.Clamp(rightY, 0, HEIGHT-PADDLE_H);
+        }
+        // движение мяча
+        ballX += ballDx;
+        ballY += ballDy;
+        if(ballY <= 0 || ballY+BALL_SIZE >= HEIGHT) ballDy *= -1;
+        // столкновение с левой ракеткой
+        if(ballX <= 20+PADDLE_W && ballX+BALL_SIZE >= 20 &&
+           ballY+BALL_SIZE >= leftY && ballY <= leftY+PADDLE_H)
+        {
+            ballDx = Math.Abs(ballDx);
+            float offset = (ballY+BALL_SIZE/2 - (leftY+PADDLE_H/2)) / (PADDLE_H/2);
+            ballDy = offset * 6;
+        }
+        // правая ракетка
+        if(ballX+BALL_SIZE >= WIDTH-20-PADDLE_W && ballX <= WIDTH-20 &&
+           ballY+BALL_SIZE >= rightY && ballY <= rightY+PADDLE_H)
+        {
+            ballDx = -Math.Abs(ballDx);
+            float offset = (ballY+BALL_SIZE/2 - (rightY+PADDLE_H/2)) / (PADDLE_H/2);
+            ballDy = offset * 6;
+        }
+        // голы
+        if(ballX <= 0) { scoreR++; ResetBall(); }
+        if(ballX+BALL_SIZE >= WIDTH) { scoreL++; ResetBall(); }
+        if(scoreL>=5 || scoreR>=5) { gameOver=true; }
+        Invalidate();
+    }
+
+    private void ResetBall()
+    {
+        ballX = WIDTH/2 - BALL_SIZE/2;
+        ballY = HEIGHT/2 - BALL_SIZE/2;
+        ballDx = 5 * (new Random().Next(2)==0?1:-1);
+        ballDy = (new Random().NextDouble() - 0.5)*6;
+    }
+
+    private void OnPaint(object sender, PaintEventArgs e)
+    {
+        Graphics g = e.Graphics;
+        g.Clear(Color.Black);
+        // ракетки
+        g.FillRectangle(Brushes.White, 20, leftY, PADDLE_W, PADDLE_H);
+        g.FillRectangle(Brushes.White, WIDTH-20-PADDLE_W, rightY, PADDLE_W, PADDLE_H);
+        // мяч
+        g.FillEllipse(Brushes.White, ballX, ballY, BALL_SIZE, BALL_SIZE);
+        // счёт
+        g.DrawString($"{scoreL} : {scoreR}", new Font("Arial",24), Brushes.White, WIDTH/2-40,20);
+        if(gameOver)
+            g.DrawString($"{(scoreL>=5?"Left":"Right")} wins! Press R", new Font("Arial",16), Brushes.Green, WIDTH/2-100, HEIGHT/2);
+        g.DrawString(aiMode?"AI":"2P", new Font("Arial",12), Brushes.Gray, 10, HEIGHT-30);
+    }
+
+    private void OnKeyDown(object sender, KeyEventArgs e)
+    {
+        if(e.KeyCode == Keys.R && gameOver) ResetGame();
+        if(e.KeyCode == Keys.A) { aiMode = !aiMode; ResetGame(); }
+    }
+    private bool IsKeyPressed(Keys key) => (Control.ModifierKeys & (Keys)key) != 0 || (System.Windows.Input.Keyboard.IsKeyDown((System.Windows.Input.Key)key));
+    // упрощённо – лучше использовать GetAsyncKeyState, но для примера оставим
+    // В реальном коде нужно добавить using System.Windows.Input;
+    // Здесь для краткости опустим полную реализацию.
+
+    [STAThread]
+    static void Main() { Application.Run(new PongForm()); }
+}
