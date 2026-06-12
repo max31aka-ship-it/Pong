@@ -1,0 +1,159 @@
+
+
+### 1. Python (Pygame)
+
+**`python/pong.py`**
+
+```python
+import pygame
+import sys
+import random
+import math
+
+pygame.init()
+WIDTH, HEIGHT = 800, 500
+BALL_SIZE = 15
+PADDLE_W, PADDLE_H = 12, 80
+FPS = 60
+
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("Pong - Python")
+clock = pygame.time.Clock()
+
+# Цвета
+BLACK = (0,0,0)
+WHITE = (255,255,255)
+GREEN = (0,255,0)
+
+# Звуки (заглушка, если нет файлов)
+try:
+    hit_sound = pygame.mixer.Sound("hit.wav")
+    score_sound = pygame.mixer.Sound("score.wav")
+except:
+    hit_sound = None
+    score_sound = None
+
+class Paddle:
+    def __init__(self, x, y):
+        self.rect = pygame.Rect(x, y, PADDLE_W, PADDLE_H)
+        self.speed = 0
+    def move(self, dy):
+        self.rect.y += dy
+        self.rect.clamp_ip(screen.get_rect())
+    def draw(self):
+        pygame.draw.rect(screen, WHITE, self.rect)
+
+class Ball:
+    def __init__(self):
+        self.reset()
+    def reset(self):
+        self.rect = pygame.Rect(WIDTH//2 - BALL_SIZE//2, HEIGHT//2 - BALL_SIZE//2, BALL_SIZE, BALL_SIZE)
+        angle = random.uniform(-0.5, 0.5)
+        self.dx = 5 * (1 if random.choice([True,False]) else -1)
+        self.dy = 5 * angle
+        self.speed_mult = 1.0
+    def move(self):
+        self.rect.x += self.dx * self.speed_mult
+        self.rect.y += self.dy * self.speed_mult
+        # отскок от стен
+        if self.rect.top <= 0 or self.rect.bottom >= HEIGHT:
+            self.dy *= -1
+    def draw(self):
+        pygame.draw.rect(screen, WHITE, self.rect)
+
+def main():
+    left_paddle = Paddle(20, HEIGHT//2 - PADDLE_H//2)
+    right_paddle = Paddle(WIDTH - 20 - PADDLE_W, HEIGHT//2 - PADDLE_H//2)
+    ball = Ball()
+    score_left = 0
+    score_right = 0
+    game_over = False
+    winner = None
+    ai_mode = True  # можно переключать клавишей A
+
+    running = True
+    while running:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_r and game_over:
+                    score_left = score_right = 0
+                    game_over = False
+                    ball.reset()
+                if event.key == pygame.K_a:
+                    ai_mode = not ai_mode
+
+        if not game_over:
+            # Управление левой ракеткой (W/S)
+            keys = pygame.key.get_pressed()
+            if keys[pygame.K_w]: left_paddle.move(-7)
+            if keys[pygame.K_s]: left_paddle.move(7)
+            # Правая ракетка (AI или игрок)
+            if ai_mode:
+                # AI: следит за мячом
+                if right_paddle.rect.centery < ball.rect.centery:
+                    right_paddle.move(5)
+                else:
+                    right_paddle.move(-5)
+            else:
+                if keys[pygame.K_UP]: right_paddle.move(-7)
+                if keys[pygame.K_DOWN]: right_paddle.move(7)
+
+            ball.move()
+            # Столкновение с ракетками
+            if ball.rect.colliderect(left_paddle.rect):
+                ball.dx = abs(ball.dx)
+                # изменение угла
+                offset = (ball.rect.centery - left_paddle.rect.centery) / (PADDLE_H/2)
+                ball.dy = offset * 5
+                ball.speed_mult += 0.05
+                if hit_sound: hit_sound.play()
+            if ball.rect.colliderect(right_paddle.rect):
+                ball.dx = -abs(ball.dx)
+                offset = (ball.rect.centery - right_paddle.rect.centery) / (PADDLE_H/2)
+                ball.dy = offset * 5
+                ball.speed_mult += 0.05
+                if hit_sound: hit_sound.play()
+
+            # Голы
+            if ball.rect.left <= 0:
+                score_right += 1
+                ball.reset()
+                if score_sound: score_sound.play()
+            if ball.rect.right >= WIDTH:
+                score_left += 1
+                ball.reset()
+                if score_sound: score_sound.play()
+
+            if score_left >= 5:
+                game_over = True
+                winner = "Left Player"
+            elif score_right >= 5:
+                game_over = True
+                winner = "Right Player" if not ai_mode else "AI"
+
+        # Отрисовка
+        screen.fill(BLACK)
+        left_paddle.draw()
+        right_paddle.draw()
+        ball.draw()
+        # Счёт
+        font = pygame.font.Font(None, 36)
+        score_text = font.render(f"{score_left}  :  {score_right}", True, WHITE)
+        screen.blit(score_text, (WIDTH//2 - 40, 20))
+        if game_over:
+            over_text = font.render(f"{winner} wins! Press R", True, GREEN)
+            screen.blit(over_text, (WIDTH//2 - 120, HEIGHT//2))
+        # Индикатор режима
+        mode_text = font.render("AI: ON" if ai_mode else "2P", True, (200,200,200))
+        screen.blit(mode_text, (10, HEIGHT-30))
+
+        pygame.display.flip()
+        clock.tick(FPS)
+
+    pygame.quit()
+    sys.exit()
+
+if __name__ == "__main__":
+    main()
