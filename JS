@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html>
+<head><title>Pong - JS</title><style>canvas{border:1px solid white; background:black;}</style></head>
+<body>
+<canvas id="pongCanvas" width="800" height="500"></canvas>
+<div>Score: <span id="scoreL">0</span> : <span id="scoreR">0</span></div>
+<button id="reset">Reset</button>
+<button id="mode">AI / 2P</button>
+<script src="pong.js"></script>
+</body>
+</html>
+const canvas = document.getElementById('pongCanvas');
+const ctx = canvas.getContext('2d');
+const W=800, H=500;
+let leftY = H/2-40, rightY = H/2-40;
+let ballX=W/2-7, ballY=H/2-7, ballDx=4, ballDy=2;
+let scoreL=0, scoreR=0, gameOver=false, aiMode=true;
+let keys = { w:false, s:false, up:false, down:false };
+
+document.addEventListener('keydown', (e)=>{
+    if(e.key==='w') keys.w=true;
+    if(e.key==='s') keys.s=true;
+    if(e.key==='ArrowUp') keys.up=true;
+    if(e.key==='ArrowDown') keys.down=true;
+    if(e.key==='r' && gameOver) resetGame();
+    if(e.key==='a') { aiMode=!aiMode; resetGame(); }
+});
+document.addEventListener('keyup', (e)=>{
+    if(e.key==='w') keys.w=false;
+    if(e.key==='s') keys.s=false;
+    if(e.key==='ArrowUp') keys.up=false;
+    if(e.key==='ArrowDown') keys.down=false;
+});
+
+function resetGame(){
+    scoreL=0; scoreR=0; gameOver=false;
+    leftY = H/2-40; rightY=H/2-40;
+    resetBall();
+    updateScore();
+}
+
+function resetBall(){
+    ballX=W/2-7; ballY=H/2-7;
+    ballDx = (Math.random()>0.5?5:-5);
+    ballDy = (Math.random()-0.5)*6;
+}
+
+function updateScore(){
+    document.getElementById('scoreL').innerText = scoreL;
+    document.getElementById('scoreR').innerText = scoreR;
+}
+
+function update(){
+    if(gameOver) return;
+    // левая ракетка
+    if(keys.w && leftY>0) leftY-=7;
+    if(keys.s && leftY+80<H) leftY+=7;
+    // правая (AI или игрок)
+    if(aiMode){
+        if(rightY+40 < ballY+7) rightY+=5;
+        else rightY-=5;
+        rightY = Math.max(0, Math.min(H-80, rightY));
+    } else {
+        if(keys.up && rightY>0) rightY-=7;
+        if(keys.down && rightY+80<H) rightY+=7;
+    }
+    // мяч
+    ballX += ballDx;
+    ballY += ballDy;
+    if(ballY<=0 || ballY+14>=H) ballDy *= -1;
+    // столкновение с левой ракеткой
+    if(ballX<=30 && ballX+14>=20 && ballY+14>=leftY && ballY<=leftY+80){
+        ballDx = Math.abs(ballDx);
+        let offset = (ballY+7 - (leftY+40))/40;
+        ballDy = offset*6;
+    }
+    // правая
+    if(ballX+14>=W-30 && ballX<=W-20 && ballY+14>=rightY && ballY<=rightY+80){
+        ballDx = -Math.abs(ballDx);
+        let offset = (ballY+7 - (rightY+40))/40;
+        ballDy = offset*6;
+    }
+    // голы
+    if(ballX<=0){ scoreR++; resetBall(); updateScore(); }
+    if(ballX+14>=W){ scoreL++; resetBall(); updateScore(); }
+    if(scoreL>=5 || scoreR>=5) gameOver=true;
+    draw();
+}
+
+function draw(){
+    ctx.fillStyle='black';
+    ctx.fillRect(0,0,W,H);
+    ctx.fillStyle='white';
+    ctx.fillRect(20, leftY, 12, 80);
+    ctx.fillRect(W-32, rightY, 12, 80);
+    ctx.fillRect(ballX, ballY, 14, 14);
+    ctx.font='30px monospace';
+    ctx.fillText(`${scoreL} : ${scoreR}`, W/2-40, 50);
+    if(gameOver){
+        ctx.fillStyle='green';
+        ctx.fillText(`${scoreL>=5?'Left':'Right'} wins! Press R`, W/2-120, H/2);
+    }
+    ctx.font='14px monospace';
+    ctx.fillStyle='gray';
+    ctx.fillText(aiMode?'AI Mode':'2P Mode', 10, H-10);
+}
+
+setInterval(update, 1000/60);
+resetGame();
